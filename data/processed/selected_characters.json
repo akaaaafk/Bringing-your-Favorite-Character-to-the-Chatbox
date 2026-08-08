@@ -1,0 +1,37 @@
+[
+  {
+    "character_id": "u4525",
+    "character_name": "DANTE",
+    "movie_title": "clerks.",
+    "line_count": 518,
+    "persona_tag": "dante"
+  },
+  {
+    "character_id": "u3681",
+    "character_name": "ALVY",
+    "movie_title": "annie hall",
+    "line_count": 459,
+    "persona_tag": "alvy"
+  },
+  {
+    "character_id": "u4331",
+    "character_name": "ACE",
+    "movie_title": "casino",
+    "line_count": 453,
+    "persona_tag": "ace"
+  },
+  {
+    "character_id": "u5262",
+    "character_name": "JACK",
+    "movie_title": "fight club",
+    "line_count": 354,
+    "persona_tag": "jack"
+  },
+  {
+    "character_id": "u4477",
+    "character_name": "GITTES",
+    "movie_title": "chinatown",
+    "line_count": 417,
+    "persona_tag": "gittes"
+  }
+]
