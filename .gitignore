@@ -38,6 +38,10 @@ credentials.json
 .cache/
 huggingface/
 
+# Frontend
+web/node_modules/
+web/dist/
+
 # Data artifacts (keep folder placeholders)
 data/raw/*
 !data/raw/.gitkeep

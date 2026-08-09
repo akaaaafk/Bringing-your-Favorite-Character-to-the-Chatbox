@@ -48,6 +48,7 @@ Hard negatives: Claude rewrites character-A lines in character-B’s style so th
 ```
 .
 ├── app.py                       # Gradio chat UI
+├── api_server.py                # FastAPI for React UI
 ├── config.py                    # Characters, paths, hyperparameters
 ├── data_pipeline.py             # Download Cornell → HF Dataset splits
 ├── generate_hard_negatives.py   # Claude hard-negative synthesis
@@ -56,6 +57,8 @@ Hard negatives: Claude rewrites character-A lines in character-B’s style so th
 ├── train_generator.py           # LoRA SFT (TRL)
 ├── inference.py                 # Best-of-N pipeline
 ├── requirements.txt
+├── design-system/               # UI design tokens
+├── web/                         # React + Tailwind cinematic chat UI
 ├── data/
 │   ├── raw/                     # Cornell zip (gitignored)
 │   └── processed/               # splits + meta.json (gitignored)
@@ -84,6 +87,20 @@ python train_generator.py
 python app.py
 # python inference.py --character "JOKER" --prompt "Why so serious?" --all
 ```
+
+### React web UI
+
+```bash
+# Terminal 1 — API (loads trained models; UI uses demo replies if API is down)
+python api_server.py
+
+# Terminal 2 — frontend
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:5173
 
 Edit `CHARACTERS` in `config.py` to swap personas, then re-run from `data_pipeline.py`.
 

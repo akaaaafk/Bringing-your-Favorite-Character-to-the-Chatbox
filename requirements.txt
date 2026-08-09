@@ -25,3 +25,5 @@ pandas>=2.2.0
 
 # ── Demo UI ───────────────────────────────────────────────────────────────────
 gradio>=4.36.0
+fastapi>=0.111.0              # React UI API (api_server.py)
+uvicorn[standard]>=0.30.0
