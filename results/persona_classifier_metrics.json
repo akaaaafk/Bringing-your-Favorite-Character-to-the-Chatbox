@@ -1,0 +1,13 @@
+{
+  "run_name": "persona_classifier",
+  "used_synthetic_data": true,
+  "test_accuracy": 0.5868055555555556,
+  "test_macro_f1": 0.5769652167597562,
+  "per_class_f1": {
+    "alvy": 0.625,
+    "bateman": 0.5,
+    "ben": 0.6432748538011696,
+    "erin": 0.5316455696202531,
+    "jack": 0.5849056603773585
+  }
+}
