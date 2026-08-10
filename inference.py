@@ -1,114 +1,104 @@
 """
 Persona inference pipeline with Best-of-N classifier reranking.
 
+Combines the LoRA-fine-tuned Qwen2.5-1.5B-Instruct generator with
+Chelsea's RoBERTa persona classifier to generate and rerank candidate
+responses for a selected character.
+
 Usage (programmatic):
     from inference import PersonaPipeline
     pipe = PersonaPipeline()
-    response = pipe.chat("Tell me about the lambs, Clarice.", character="HANNIBAL LECTER")
+    response = pipe.chat("How's your day going?", character="jack")
 
 Usage (CLI):
-    python inference.py --character "JOKER" --prompt "Why so serious?"
-    python inference.py --character "FORREST" --prompt "What is life?" --n 5
+    python inference.py --character "jack" --prompt "How's your day going?"
+    python inference.py --character "bateman" --prompt "..." --n 5 --all
 """
 import argparse
-import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
-from transformers import (
-    AutoModelForCausalLM,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    pipeline,
-)
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
 
-from config import (
-    BEAM_N, CLASSIFIER_DIR, GENERATOR_DIR, GENERATOR_MAX_NEW,
-    PROCESSED_DIR, TEMPERATURE, TOP_P,
-)
+from persona_classifier import predict_persona_batch
+
+BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+ADAPTER_DIR = Path(__file__).resolve().parent / "models" / "generator" / "generator_lora_adapter"
+CHARACTERS = ["jack", "bateman", "alvy", "ben", "erin"]
 
 
 @dataclass
 class CandidateResult:
     text: str
-    persona_score: float          # classifier prob for target character
+    persona_score: float          # classifier probability for target character
     rank: int                     # 1 = best
 
 
 class PersonaPipeline:
     """
     Two-model pipeline:
-      1. LoRA-fine-tuned generator produces N candidate completions.
-      2. RoBERTa classifier scores each for persona-consistency.
-      3. Highest-scoring candidate is returned.
+      1. LoRA-fine-tuned Qwen2.5-1.5B-Instruct generates N candidate replies.
+      2. Chelsea's RoBERTa classifier scores each for persona-consistency.
+      3. The highest-scoring candidate is returned.
     """
 
-    def __init__(
-        self,
-        generator_path: str | Path = None,
-        classifier_path: str | Path = None,
-        device: str | None = None,
-    ):
-        gen_path = str(generator_path or GENERATOR_DIR / "merged")
-        cls_path = str(classifier_path or CLASSIFIER_DIR)
+    def __init__(self, adapter_dir: str | Path = None, device: str | None = None):
+        adapter_path = Path(adapter_dir or ADAPTER_DIR)
+        self._using_adapter = adapter_path.exists() and any(adapter_path.iterdir())
 
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
 
-        print(f"[pipeline] loading generator from {gen_path} …")
-        self.gen_tokenizer = AutoTokenizer.from_pretrained(gen_path, use_fast=True)
-        self.gen_tokenizer.pad_token = self.gen_tokenizer.eos_token
-        self.gen_model = AutoModelForCausalLM.from_pretrained(
-            gen_path,
-            torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+        print(f"[pipeline] loading generator base model {BASE_MODEL} …")
+        self.gen_tokenizer = AutoTokenizer.from_pretrained(
+            str(adapter_path) if self._using_adapter else BASE_MODEL
+        )
+        if self.gen_tokenizer.pad_token is None:
+            self.gen_tokenizer.pad_token = self.gen_tokenizer.eos_token
+
+        base_model = AutoModelForCausalLM.from_pretrained(
+            BASE_MODEL,
+            torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
         ).to(device)
+
+        if self._using_adapter:
+            print(f"[pipeline] applying LoRA adapter from {adapter_path} …")
+            self.gen_model = PeftModel.from_pretrained(base_model, str(adapter_path))
+        else:
+            print("[pipeline] no adapter found, using base model untuned")
+            self.gen_model = base_model
         self.gen_model.eval()
 
-        print(f"[pipeline] loading classifier from {cls_path} …")
-        self.cls_tokenizer = AutoTokenizer.from_pretrained(cls_path)
-        self.cls_model = AutoModelForSequenceClassification.from_pretrained(
-            cls_path
-        ).to(device)
-        self.cls_model.eval()
-
-        # label mapping from classifier config
-        self.id2label: dict[int, str] = self.cls_model.config.id2label
-        self.label2id: dict[str, int] = self.cls_model.config.label2id
-
-        meta_path = PROCESSED_DIR / "meta.json"
-        self.characters: list[str] = []
-        if meta_path.exists():
-            self.characters = json.loads(meta_path.read_text())["characters"]
+        print("[pipeline] classifier loaded via persona_classifier module")
 
     # ── Generation ────────────────────────────────────────────────────────────
 
-    def _build_prompt(self, user_text: str, character: str) -> str:
-        tag = character.replace(" ", "_")
+    def _build_prompt(self, user_text: str, persona_tag: str) -> str:
+        system = (
+            f"You are {persona_tag}. Respond only in their voice, "
+            f"matching their vocabulary and speech patterns."
+        )
         return (
-            f"<|system|>You are {tag}. Speak exactly in their voice.\n</s>\n"
-            f"<|user|>{user_text}\n</s>\n"
-            f"<|assistant|>"
+            f"<|im_start|>system\n{system}<|im_end|>\n"
+            f"<|im_start|>user\n{user_text}<|im_end|>\n"
+            f"<|im_start|>assistant\n"
         )
 
-    def _generate_candidates(self, prompt: str, n: int) -> list[str]:
-        inputs = self.gen_tokenizer(
-            prompt, return_tensors="pt", truncation=True, max_length=512
-        ).to(self.device)
-
+    def _generate_candidates(self, prompt: str, n: int, max_new_tokens: int = 60) -> list[str]:
+        inputs = self.gen_tokenizer(prompt, return_tensors="pt").to(self.device)
         with torch.no_grad():
             outputs = self.gen_model.generate(
                 **inputs,
-                max_new_tokens=GENERATOR_MAX_NEW,
+                max_new_tokens=max_new_tokens,
                 do_sample=True,
-                temperature=TEMPERATURE,
-                top_p=TOP_P,
+                temperature=0.9,
+                top_p=0.95,
                 num_return_sequences=n,
                 pad_token_id=self.gen_tokenizer.eos_token_id,
-                eos_token_id=self.gen_tokenizer.eos_token_id,
             )
-
         prompt_len = inputs["input_ids"].shape[1]
         candidates = []
         for output in outputs:
@@ -120,22 +110,11 @@ class PersonaPipeline:
 
     # ── Scoring ───────────────────────────────────────────────────────────────
 
-    def _score_candidates(
-        self, candidates: list[str], target_label_id: int
-    ) -> list[float]:
+    def _score_candidates(self, candidates: list[str], persona_tag: str) -> list[float]:
         if not candidates:
             return []
-        enc = self.cls_tokenizer(
-            candidates,
-            return_tensors="pt",
-            truncation=True,
-            max_length=128,
-            padding=True,
-        ).to(self.device)
-        with torch.no_grad():
-            logits = self.cls_model(**enc).logits
-        probs = torch.softmax(logits, dim=-1)[:, target_label_id].cpu().tolist()
-        return probs
+        scores = predict_persona_batch(candidates)
+        return [s.get(persona_tag, 0.0) for s in scores]
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -143,24 +122,21 @@ class PersonaPipeline:
         self,
         user_text: str,
         character: str,
-        n: int = BEAM_N,
+        n: int = 3,
         return_all: bool = False,
     ) -> str | list[CandidateResult]:
         """
-        Generate n candidates and return the one with the highest classifier score
-        for the target character.  If return_all=True, returns all ranked candidates.
+        Generate n candidates and return the one with the highest classifier
+        score for the target character. If return_all=True, returns all
+        ranked candidates instead of just the best one.
         """
-        char_upper = character.upper()
-        if char_upper not in self.label2id:
-            raise ValueError(
-                f"Unknown character '{character}'. "
-                f"Available: {list(self.label2id.keys())}"
-            )
-        target_id = self.label2id[char_upper]
+        persona_tag = character.lower()
+        if persona_tag not in CHARACTERS:
+            raise ValueError(f"Unknown character '{character}'. Available: {CHARACTERS}")
 
-        prompt = self._build_prompt(user_text, char_upper)
+        prompt = self._build_prompt(user_text, persona_tag)
         candidates = self._generate_candidates(prompt, n)
-        scores = self._score_candidates(candidates, target_id)
+        scores = self._score_candidates(candidates, persona_tag)
 
         ranked = sorted(
             [CandidateResult(text=t, persona_score=s, rank=0)
@@ -176,9 +152,9 @@ class PersonaPipeline:
         return ranked[0].text if ranked else ""
 
     def plain_generate(self, user_text: str, character: str) -> str:
-        """No reranking — plain greedy / sampling baseline."""
-        char_upper = character.upper()
-        prompt = self._build_prompt(user_text, char_upper)
+        """No reranking — plain single-sample generation baseline."""
+        persona_tag = character.lower()
+        prompt = self._build_prompt(user_text, persona_tag)
         candidates = self._generate_candidates(prompt, n=1)
         return candidates[0] if candidates else ""
 
@@ -189,7 +165,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--character", required=True)
     parser.add_argument("--prompt", required=True)
-    parser.add_argument("--n", type=int, default=BEAM_N)
+    parser.add_argument("--n", type=int, default=3)
     parser.add_argument("--all", action="store_true", help="show all candidates")
     args = parser.parse_args()
 
@@ -202,5 +178,4 @@ if __name__ == "__main__":
             print(f"  #{r.rank} (score={r.persona_score:.3f}): {r.text}")
     else:
         print(f"\n[{args.character}]: {results[0].text}")
-        print(f"  persona score: {results[0].persona_score:.3f} "
-              f"(best of {len(results)})")
+        print(f"  persona score: {results[0].persona_score:.3f} (best of {len(results)})")
