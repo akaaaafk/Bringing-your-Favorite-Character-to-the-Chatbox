@@ -25,7 +25,7 @@ from peft import PeftModel
 from persona_classifier import predict_persona_batch
 
 BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
-ADAPTER_DIR = Path(__file__).resolve().parent / "models" / "generator" / "generator_lora_adapter"
+ADAPTER_DIR = Path(__file__).resolve().parent / "models" / "generator"
 CHARACTERS = ["jack", "bateman", "alvy", "ben", "erin"]
 
 
