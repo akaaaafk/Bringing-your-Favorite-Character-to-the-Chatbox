@@ -10,6 +10,7 @@ a RoBERTa persona classifier, and optional Best-of-N reranking.
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Enter_the_projection_room-E9A83B?style=for-the-badge&logo=vercel&logoColor=1F1710)](https://web-nine-bice-uqkujgnxqk.vercel.app)
 [![API](https://img.shields.io/badge/FastAPI-Live-3D8C78?style=for-the-badge&logo=fastapi&logoColor=white)](https://akaaaafk--movie-persona-api-fastapi-app.modal.run/docs)
+[![Weights](https://img.shields.io/badge/Hugging_Face-Model_artifacts-FFD21E?style=for-the-badge&logo=huggingface&logoColor=111111)](https://huggingface.co/datasets/akaaafk/Bringing-your-Favorite-Character-to-the-Chatbox/tree/main/models)
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-LoRA-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)
@@ -17,6 +18,7 @@ a RoBERTa persona classifier, and optional Best-of-N reranking.
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
 
 [Live demo](https://web-nine-bice-uqkujgnxqk.vercel.app) ·
+[Model weights](https://huggingface.co/datasets/akaaafk/Bringing-your-Favorite-Character-to-the-Chatbox/tree/main/models) ·
 [Quick start](#local-setup) ·
 [Docker](#docker) ·
 [Training](#reproducing-training) ·
@@ -134,6 +136,14 @@ produce new weights. The classifier checkpoint is large and may not be present
 in a fresh Git clone because model artifacts are normally excluded from Git.
 Copy or download both artifacts into the paths above before running the API or
 building the Docker image.
+
+Download the complete classifier and generator artifact directories from
+[Hugging Face](https://huggingface.co/datasets/akaaafk/Bringing-your-Favorite-Character-to-the-Chatbox/tree/main/models):
+
+```bash
+hf download akaaafk/Bringing-your-Favorite-Character-to-the-Chatbox \
+  --repo-type dataset --include "models/**" --local-dir .
+```
 
 ## Local setup
 
