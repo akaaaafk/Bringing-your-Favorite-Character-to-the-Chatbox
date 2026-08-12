@@ -1,17 +1,44 @@
 # Movie Persona Chat
 
-A full-stack deep-learning project for chatting with five movie characters.
-A LoRA-tuned Qwen generator drafts replies, a RoBERTa persona classifier can
-rerank multiple candidates, and a React interface provides text, microphone,
-conversation memory, and optional neural text-to-speech.
+<!-- markdownlint-disable MD033 -->
+<div align="center">
 
-**Course:** Columbia COMS 5910 Deep Learning — Summer 2026 final project
+**Five film voices. Your cue.**
 
-## Demo
+A full-stack persona chat experience powered by a LoRA-tuned Qwen generator,
+a RoBERTa persona classifier, and optional Best-of-N reranking.
 
-- Web: https://web-nine-bice-uqkujgnxqk.vercel.app
-- API: https://akaaaafk--movie-persona-api-fastapi-app.modal.run
-- Interactive API docs: append `/docs` to the API URL
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Enter_the_projection_room-E9A83B?style=for-the-badge&logo=vercel&logoColor=1F1710)](https://web-nine-bice-uqkujgnxqk.vercel.app)
+[![API](https://img.shields.io/badge/FastAPI-Live-3D8C78?style=for-the-badge&logo=fastapi&logoColor=white)](https://akaaaafk--movie-persona-api-fastapi-app.modal.run/docs)
+
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-LoRA-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)
+![React](https://img.shields.io/badge/React-19-20232A?style=flat-square&logo=react&logoColor=61DAFB)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
+
+[Live demo](https://web-nine-bice-uqkujgnxqk.vercel.app) ·
+[Quick start](#local-setup) ·
+[Docker](#docker) ·
+[Training](#reproducing-training) ·
+[Results](#evaluation-and-results) ·
+[API](#api)
+
+</div>
+<!-- markdownlint-enable MD033 -->
+
+![Movie Persona Chat projection-room landing page](docs/web-preview.png)
+
+> **Columbia COMS 5910 Deep Learning — Summer 2026 final project**
+
+## At a glance
+
+- **Five personas** from the Cornell Movie-Dialogs Corpus
+- **Qwen2.5-1.5B + LoRA** for persona-conditioned response generation
+- **RoBERTa classifier** for persona scoring and optional Best-of-N selection
+- **React + FastAPI** application with conversation memory, microphone input,
+  and streamed Edge TTS
+- **Reproducible pipeline** covering data preparation, training, evaluation,
+  local development, Docker, and cloud deployment
 
 The hosted UI defaults to one candidate with reranking disabled to reduce
 latency and compute cost. Local development keeps Best-of-N available.
@@ -38,7 +65,7 @@ User message + recent history + selected persona
 The five personas are:
 
 | Tag | Character | Film |
-|---|---|---|
+| --- | --- | --- |
 | `jack` | Jack / Narrator | *Fight Club* |
 | `bateman` | Patrick Bateman | *American Psycho* |
 | `alvy` | Alvy Singer | *Annie Hall* |
@@ -48,7 +75,7 @@ The five personas are:
 ## What is included
 
 | Component | Implementation | Required artifact |
-|---|---|---|
+| --- | --- | --- |
 | Persona classifier | `persona_classifier/`, `scripts/train_classifier.py` | `models/classifier/model.safetensors` |
 | Persona generator | `scripts/train_generator.py`, `inference.py` | `models/generator/adapter_model.safetensors` |
 | Best-of-N reranker | `PersonaPipeline.chat()` in `inference.py` | Classifier + generator artifacts |
@@ -230,7 +257,7 @@ docker run --rm --gpus all -p 8000:8000 \
 Useful environment variables:
 
 | Variable | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `PORT` | `8000` | Container API port |
 | `PRELOAD_PIPELINE` | `0` | Set to `1` to load models during startup |
 | `CORS_ORIGINS` | local Vite origins | Comma-separated allowed UI origins |
@@ -298,7 +325,7 @@ Best-of-N versus plain LoRA was evaluated on 120 paired generations
 (5 personas × 8 prompts × 3 random seeds, `N=3`):
 
 | Metric | Plain LoRA | Best-of-N | Difference |
-|---|---:|---:|---:|
+| --- | ---: | ---: | ---: |
 | Mean classifier probability for target persona | 0.213 | 0.422 | **+0.209** |
 | Mean local LLM judge score (1–5) | 2.050 | 2.217 | **+0.167** |
 
@@ -325,7 +352,7 @@ Detailed outputs:
 ## API
 
 | Method | Route | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `GET` | `/api/health` | Service, model-load, persona, and TTS status |
 | `GET` | `/api/characters` | Persona metadata |
 | `POST` | `/api/chat` | Generate a reply, optionally with Best-of-N |
