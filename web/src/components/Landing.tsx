@@ -50,7 +50,7 @@ export function Landing({ onEnter, resume }: LandingProps) {
       <div className="letterbox-bar letterbox-top" aria-hidden />
       <div className="letterbox-bar letterbox-bottom" aria-hidden />
 
-      <section className="relative flex min-h-dvh flex-col justify-end px-6 pb-24 pt-14 sm:px-10 lg:px-16 lg:pb-28">
+      <section className="relative flex min-h-dvh flex-col justify-end px-5 pb-16 pt-10 sm:px-10 sm:pb-24 sm:pt-14 lg:px-16 lg:pb-28">
         <div className="film-perforation film-perforation-left hidden sm:block" aria-hidden />
         <div className="film-perforation film-perforation-right hidden sm:block" aria-hidden />
 
@@ -130,25 +130,25 @@ export function Landing({ onEnter, resume }: LandingProps) {
           </p>
         </div>
 
-        <header className="hero-reveal-late relative z-10 mb-auto flex items-center gap-3.5 pt-2 sm:pt-4">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-accent/35 bg-card/70 text-accent shadow-[0_0_28px_-6px_oklch(0.55_0.12_75_/_0.5)]">
+        <header className="hero-reveal-late relative z-10 mb-auto flex items-center gap-3 pt-1 safe-header-pad sm:gap-3.5 sm:pt-4">
+          <span className="flex h-11 w-11 items-center justify-center rounded-full border border-accent/35 bg-card/70 text-accent shadow-[0_0_28px_-6px_oklch(0.55_0.12_75_/_0.5)] sm:h-12 sm:w-12">
             <Clapperboard className="h-5 w-5" strokeWidth={1.5} aria-hidden />
           </span>
-          <p className="font-serif text-2xl tracking-[0.01em] text-foreground sm:text-3xl">
+          <p className="font-serif text-xl tracking-[0.01em] text-foreground sm:text-3xl">
             Movie Persona Chat
           </p>
         </header>
 
-        <div className="relative z-10 max-w-[12ch] sm:max-w-2xl lg:max-w-3xl">
+        <div className="relative z-10 max-w-[14ch] sm:max-w-2xl lg:max-w-3xl">
           <div className="gate-weave">
             <BlurText
               as="h1"
-              text="Five roles. One reel. Your cue."
+              text="Five roles. Your cue."
               animateBy="words"
               delay={130}
               stepDuration={0.36}
               direction="bottom"
-              className="poster-title font-serif text-[3.35rem] font-medium leading-[0.92] tracking-[-0.04em] text-foreground sm:text-6xl lg:text-[5.5rem] xl:text-[6rem]"
+              className="poster-title font-serif text-[2.55rem] font-medium leading-[0.94] tracking-[-0.04em] text-foreground sm:text-6xl lg:text-[5.5rem] xl:text-[6rem]"
               animationFrom={{ filter: 'blur(16px)', opacity: 0, y: 36 }}
               animationTo={[
                 { filter: 'blur(6px)', opacity: 0.55, y: 12 },
@@ -157,17 +157,17 @@ export function Landing({ onEnter, resume }: LandingProps) {
               easing={[0.16, 1, 0.3, 1]}
             />
           </div>
-          <p className="hero-reveal-cta mt-6 max-w-md text-base leading-relaxed text-muted-fg sm:text-lg">
+          <p className="hero-reveal-cta mt-4 max-w-md text-[0.95rem] leading-relaxed text-muted-fg sm:mt-6 sm:text-lg">
             Chat with film voices that stay in character.
           </p>
-          <div className="hero-reveal-cta mt-10 flex flex-wrap items-center gap-6">
+          <div className="hero-reveal-cta mt-7 flex flex-col items-stretch gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:items-center sm:gap-6">
             <ClickSpark
               sparkColor="#C9A962"
               sparkSize={10}
               sparkRadius={28}
               sparkCount={14}
               duration={460}
-              className="inline-flex"
+              className="inline-flex w-full sm:w-auto"
             >
               <button
                 type="button"
@@ -180,7 +180,7 @@ export function Landing({ onEnter, resume }: LandingProps) {
                     block: 'start',
                   })
                 }}
-                className="btn-sheen group relative z-0 inline-flex min-h-12 cursor-pointer items-center gap-3 rounded-full bg-accent px-9 py-4 text-[0.95rem] font-semibold tracking-wide text-on-accent shadow-[0_18px_48px_-10px_oklch(0.45_0.12_75_/_0.7)] transition duration-200 hover:brightness-110 active:scale-[0.97]"
+                className="btn-sheen group relative z-0 inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-full bg-accent px-8 py-3.5 text-[0.95rem] font-semibold tracking-wide text-on-accent shadow-[0_18px_48px_-10px_oklch(0.45_0.12_75_/_0.7)] transition duration-200 hover:brightness-110 active:scale-[0.97] sm:w-auto sm:px-9 sm:py-4"
               >
                 Choose a voice
                 <ArrowRight
@@ -193,28 +193,28 @@ export function Landing({ onEnter, resume }: LandingProps) {
               <button
                 type="button"
                 onClick={resume.onResume}
-                className="cursor-pointer rounded-sm text-sm tracking-wide text-muted-fg underline-offset-4 transition duration-200 hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg px-3 text-sm tracking-wide text-muted-fg underline-offset-4 transition duration-200 hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring sm:justify-start sm:px-0"
               >
                 Continue with {resume.character.shortName}
               </button>
             ) : null}
             <a
               href="#cast"
-              className="cursor-pointer rounded-sm text-sm tracking-wide text-muted-fg underline-offset-4 transition duration-200 hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+              className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg px-3 text-sm tracking-wide text-muted-fg underline-offset-4 transition duration-200 hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring sm:justify-start sm:px-0"
             >
               Meet the cast
             </a>
           </div>
         </div>
 
-        <div className="hero-reveal-cta relative z-10 mt-14 flex lg:hidden">
-          <div className="flex -space-x-4">
+        <div className="hero-reveal-cta relative z-10 mt-8 flex lg:hidden">
+          <div className="flex flex-wrap items-center gap-2.5">
             {CHARACTERS.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => onEnter(c)}
-                className="cursor-pointer rounded-full ring-2 ring-background transition hover:z-10 hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-full ring-2 ring-background transition hover:z-10 hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 aria-label={`Chat with ${c.shortName}`}
                 style={{ filter: 'contrast(1.08) saturate(0.9)' }}
               >
@@ -228,7 +228,7 @@ export function Landing({ onEnter, resume }: LandingProps) {
       <section
         id="cast"
         aria-labelledby="cast-heading"
-        className="relative scroll-mt-8 border-t border-white/5 bg-background px-6 py-20 sm:px-10 sm:py-24 lg:px-16 lg:pb-32"
+        className="relative scroll-mt-8 border-t border-white/5 bg-background px-5 py-14 sm:px-10 sm:py-24 lg:px-16 lg:pb-32"
       >
         <div
           className="film-grain pointer-events-none absolute inset-0 opacity-30 mix-blend-overlay"
@@ -255,7 +255,7 @@ export function Landing({ onEnter, resume }: LandingProps) {
 
           <ul
             ref={castRef}
-            className="mt-16 grid gap-x-10 gap-y-16 sm:grid-cols-2 lg:grid-cols-3"
+            className="mt-10 grid gap-x-10 gap-y-12 sm:mt-16 sm:grid-cols-2 sm:gap-y-16 lg:grid-cols-3"
           >
             {CHARACTERS.map((char, i) => (
               <li

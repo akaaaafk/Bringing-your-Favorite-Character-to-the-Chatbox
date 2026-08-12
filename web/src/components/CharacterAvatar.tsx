@@ -71,12 +71,6 @@ export function CharacterAvatar({
         loading="lazy"
         decoding="async"
       />
-      {mood === 'speaking' && (
-        <span
-          className="avatar-mouth-bar pointer-events-none absolute bottom-[16%] left-1/2 z-20 h-1 w-[42%] -translate-x-1/2 rounded-full opacity-90"
-          style={{ background: character.accent }}
-        />
-      )}
       {mood === 'listening' && (
         <span className="avatar-listen-dot absolute bottom-0.5 left-1/2 z-20 h-2 w-2 -translate-x-1/2 rounded-full bg-accent" />
       )}

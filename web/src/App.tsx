@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Chat } from './components/Chat'
 import { Landing } from './components/Landing'
 import { CHARACTERS, type Character } from './data/characters'
@@ -23,31 +23,46 @@ export default function App() {
       onResume: () => {
         setCharacter(resumeChar)
         setView('chat')
+        window.history.pushState({ mpc: 'chat' }, '')
       },
     }
     // Recompute when returning to landing after a chat session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [landingTick])
 
+  useEffect(() => {
+    const onPop = () => {
+      setView('landing')
+      setCharacter(undefined)
+      setLandingTick((n) => n + 1)
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  function openChat(c?: Character) {
+    if (c) setCharacter(c)
+    setView('chat')
+    window.history.pushState({ mpc: 'chat' }, '')
+  }
+
+  function backToLanding() {
+    if (window.history.state && (window.history.state as { mpc?: string }).mpc === 'chat') {
+      window.history.back()
+      return
+    }
+    setView('landing')
+    setCharacter(undefined)
+    setLandingTick((n) => n + 1)
+  }
+
   if (view === 'chat') {
-    return (
-      <Chat
-        initialCharacter={character}
-        onBack={() => {
-          setView('landing')
-          setCharacter(undefined)
-          setLandingTick((n) => n + 1)
-        }}
-      />
-    )
+    return <Chat initialCharacter={character} onBack={backToLanding} />
   }
 
   return (
     <Landing
-      onEnter={(c) => {
-        setCharacter(c)
-        setView('chat')
-      }}
+      onEnter={(c) => openChat(c)}
       resume={resume}
     />
   )

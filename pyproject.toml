@@ -5,7 +5,7 @@ name = "persona-classifier"
 
 version = "0.1.0"
 
-description = "Phase 1: Data prep + persona classifier for the Persona Voice Studio project"
+description = "Movie persona chat: classifier training scripts + serving deps"
 
 requires-python = ">=3.10"
 

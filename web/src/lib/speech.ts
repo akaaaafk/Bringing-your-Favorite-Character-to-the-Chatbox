@@ -1,3 +1,5 @@
+import { apiUrl } from './apiBase'
+
 export type SpeechSupport = {
   recognition: boolean
   synthesis: boolean
@@ -9,9 +11,11 @@ export function getSpeechSupport(): SpeechSupport {
   }
   const SpeechRecognitionCtor =
     window.SpeechRecognition ?? window.webkitSpeechRecognition
+  // Neural TTS uses HTMLAudioElement; speechSynthesis is only the fallback.
+  const canPlayAudio = typeof Audio !== 'undefined'
   return {
     recognition: Boolean(SpeechRecognitionCtor),
-    synthesis: 'speechSynthesis' in window,
+    synthesis: canPlayAudio || 'speechSynthesis' in window,
   }
 }
 
@@ -188,32 +192,467 @@ export function createToggleListener(handlers: ToggleListenHandlers) {
   }
 }
 
-export function speakText(
-  text: string,
-  opts?: {
-    onStart?: () => void
-    onEnd?: () => void
-    rate?: number
-    pitch?: number
-  },
-): void {
+export type SpeakVoiceOpts = {
+  /** Character id / tag for neural TTS (e.g. ALVY / alvy). */
+  character?: string
+  prefer?: string[]
+  gender?: 'male' | 'female'
+  rate?: number
+  pitch?: number
+  onStart?: () => void
+  onEnd?: () => void
+  /** Autoplay blocked (common on mobile after async chat). */
+  onBlocked?: () => void
+}
+
+const FEMALE_HINTS =
+  /\b(zira|susan|samantha|karen|hazel|aria|jenny|michelle|linda|helen|female|woman)\b/i
+const MALE_HINTS =
+  /\b(david|mark|guy|andrew|james|george|fred|bruce|daniel|alex|tom|ralph|junior|sam|male|man)\b/i
+
+let currentAudio: HTMLAudioElement | null = null
+let currentObjectUrl: string | null = null
+let currentMediaSource: MediaSource | null = null
+let currentAbort: AbortController | null = null
+let speakGeneration = 0
+let audioUnlocked = false
+
+const MSE_MP3 = 'audio/mpeg'
+/** Minimal silent WAV — unlocks HTMLAudioElement inside a user gesture. */
+const SILENT_WAV =
+  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA='
+
+function isAppleTouch(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  )
+}
+
+/**
+ * Call from a tap/click (Send, mic, unmute). Mobile browsers block audio.play()
+ * that starts only after an async fetch unless unlocked in a gesture.
+ */
+export function unlockAudioPlayback(): void {
+  if (typeof window === 'undefined' || audioUnlocked) return
+  try {
+    const AC =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext
+    if (AC) {
+      const ctx = new AC()
+      void ctx.resume().finally(() => {
+        void ctx.close().catch(() => {})
+      })
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const probe = new Audio(SILENT_WAV)
+    prepareAudioElement(probe)
+    void probe
+      .play()
+      .then(() => {
+        audioUnlocked = true
+        probe.pause()
+      })
+      .catch(() => {
+        /* still try later; onBlocked may surface a tap-to-hear */
+      })
+  } catch {
+    /* ignore */
+  }
+}
+
+function prepareAudioElement(audio: HTMLAudioElement) {
+  audio.setAttribute('playsinline', 'true')
+  audio.setAttribute('webkit-playsinline', 'true')
+  ;(audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true
+  audio.preload = 'auto'
+}
+
+function isAutoplayBlocked(err: unknown): boolean {
+  const name = (err as { name?: string })?.name
+  if (name === 'NotAllowedError' || name === 'AbortError') return name === 'NotAllowedError'
+  const msg = String((err as { message?: string })?.message ?? err)
+  return /NotAllowedError|user didn't interact|user gesture|play\(\) failed/i.test(msg)
+}
+
+function canStreamMpeg(): boolean {
+  // iOS Safari: MSE + audio/mpeg is unreliable; prefer full blob playback.
+  if (isAppleTouch()) return false
+  return (
+    typeof MediaSource !== 'undefined' &&
+    typeof MediaSource.isTypeSupported === 'function' &&
+    MediaSource.isTypeSupported(MSE_MP3)
+  )
+}
+
+function stopNeuralAudio(opts?: { keepAbort?: boolean }) {
+  if (!opts?.keepAbort) {
+    currentAbort?.abort()
+    currentAbort = null
+  }
+  if (currentAudio) {
+    currentAudio.onplay = null
+    currentAudio.onended = null
+    currentAudio.onerror = null
+    try {
+      currentAudio.pause()
+    } catch {
+      /* ignore */
+    }
+    currentAudio.removeAttribute('src')
+    currentAudio.load()
+    currentAudio = null
+  }
+  if (currentMediaSource) {
+    try {
+      if (currentMediaSource.readyState === 'open') {
+        currentMediaSource.endOfStream()
+      }
+    } catch {
+      /* ignore */
+    }
+    currentMediaSource = null
+  }
+  if (currentObjectUrl) {
+    URL.revokeObjectURL(currentObjectUrl)
+    currentObjectUrl = null
+  }
+}
+
+function scoreVoice(
+  voice: SpeechSynthesisVoice,
+  prefer: string[],
+  gender: 'male' | 'female' | undefined,
+): number {
+  const name = voice.name
+  let score = 0
+  if (/^en(-|_)/i.test(voice.lang) || voice.lang.toLowerCase() === 'en') {
+    score += 40
+  } else if (/^en/i.test(voice.lang)) {
+    score += 25
+  } else {
+    return -1000
+  }
+  if (voice.localService) score += 8
+  for (let i = 0; i < prefer.length; i++) {
+    if (name.toLowerCase().includes(prefer[i].toLowerCase())) {
+      score += 100 - i * 8
+      break
+    }
+  }
+  if (gender === 'female') {
+    if (FEMALE_HINTS.test(name)) score += 35
+    if (MALE_HINTS.test(name)) score -= 40
+  } else if (gender === 'male') {
+    if (MALE_HINTS.test(name)) score += 35
+    if (FEMALE_HINTS.test(name)) score -= 40
+  }
+  return score
+}
+
+function pickVoice(
+  prefer: string[],
+  gender?: 'male' | 'female',
+): SpeechSynthesisVoice | null {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null
+  const voices = window.speechSynthesis.getVoices()
+  if (!voices.length) return null
+  let best: SpeechSynthesisVoice | null = null
+  let bestScore = -Infinity
+  for (const voice of voices) {
+    const s = scoreVoice(voice, prefer, gender)
+    if (s > bestScore) {
+      bestScore = s
+      best = voice
+    }
+  }
+  return bestScore > -500 ? best : null
+}
+
+function speakBrowser(text: string, opts?: SpeakVoiceOpts): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     opts?.onEnd?.()
     return
   }
 
-  window.speechSynthesis.cancel()
-  const utter = new SpeechSynthesisUtterance(text)
-  utter.rate = opts?.rate ?? 1
-  utter.pitch = opts?.pitch ?? 1
-  utter.lang = 'en-US'
-  utter.onstart = () => opts?.onStart?.()
-  utter.onend = () => opts?.onEnd?.()
-  utter.onerror = () => opts?.onEnd?.()
-  window.speechSynthesis.speak(utter)
+  const run = () => {
+    window.speechSynthesis.cancel()
+    const utter = new SpeechSynthesisUtterance(text)
+    utter.rate = opts?.rate ?? 1
+    utter.pitch = opts?.pitch ?? 1
+    utter.lang = 'en-US'
+    const voice = pickVoice(opts?.prefer ?? [], opts?.gender)
+    if (voice) {
+      utter.voice = voice
+      utter.lang = voice.lang || 'en-US'
+    }
+    let started = false
+    utter.onstart = () => {
+      started = true
+      opts?.onStart?.()
+    }
+    utter.onend = () => opts?.onEnd?.()
+    utter.onerror = () => {
+      if (!started) finishBlocked(opts)
+      else opts?.onEnd?.()
+    }
+    window.speechSynthesis.speak(utter)
+  }
+
+  if (window.speechSynthesis.getVoices().length > 0) {
+    run()
+    return
+  }
+
+  let spoken = false
+  const onVoices = () => {
+    if (spoken) return
+    spoken = true
+    window.speechSynthesis.removeEventListener('voiceschanged', onVoices)
+    run()
+  }
+  window.speechSynthesis.addEventListener('voiceschanged', onVoices)
+  window.setTimeout(onVoices, 250)
+}
+
+async function playMpegBlob(
+  blob: Blob,
+  opts?: SpeakVoiceOpts,
+  generation?: number,
+): Promise<void> {
+  if (generation !== undefined && generation !== speakGeneration) return
+  stopNeuralAudio({ keepAbort: true })
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel()
+  }
+  const url = URL.createObjectURL(blob)
+  currentObjectUrl = url
+  const audio = new Audio(url)
+  prepareAudioElement(audio)
+  currentAudio = audio
+  await new Promise<void>((resolve, reject) => {
+    audio.onended = () => {
+      stopNeuralAudio()
+      opts?.onEnd?.()
+      resolve()
+    }
+    audio.onerror = () => {
+      stopNeuralAudio()
+      reject(new Error('audio playback failed'))
+    }
+    audio.onplay = () => {
+      audioUnlocked = true
+      opts?.onStart?.()
+    }
+    void audio.play().catch(reject)
+  })
+}
+
+async function playMpegStream(
+  res: Response,
+  opts?: SpeakVoiceOpts,
+  generation?: number,
+): Promise<void> {
+  if (!res.body) throw new Error('no response body')
+  if (generation !== undefined && generation !== speakGeneration) return
+
+  stopNeuralAudio({ keepAbort: true })
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel()
+  }
+
+  const mediaSource = new MediaSource()
+  currentMediaSource = mediaSource
+  const url = URL.createObjectURL(mediaSource)
+  currentObjectUrl = url
+  const audio = new Audio()
+  prepareAudioElement(audio)
+  currentAudio = audio
+  audio.src = url
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+    const fail = (err: unknown) => {
+      if (settled) return
+      settled = true
+      stopNeuralAudio()
+      reject(err instanceof Error ? err : new Error(String(err)))
+    }
+    const succeed = () => {
+      if (settled) return
+      settled = true
+      stopNeuralAudio()
+      opts?.onEnd?.()
+      resolve()
+    }
+
+    audio.onended = () => succeed()
+    audio.onerror = () => fail(new Error('audio playback failed'))
+
+    mediaSource.addEventListener('sourceopen', () => {
+      let sb: SourceBuffer
+      try {
+        sb = mediaSource.addSourceBuffer(MSE_MP3)
+      } catch (err) {
+        fail(err)
+        return
+      }
+
+      const queue: Uint8Array[] = []
+      let streamDone = false
+      let started = false
+
+      const pump = () => {
+        if (generation !== undefined && generation !== speakGeneration) return
+        if (sb.updating || queue.length === 0) {
+          if (!sb.updating && streamDone && queue.length === 0) {
+            try {
+              if (mediaSource.readyState === 'open') mediaSource.endOfStream()
+            } catch {
+              /* ignore */
+            }
+          }
+          return
+        }
+        const next = queue.shift()
+        if (!next) return
+        try {
+          sb.appendBuffer(new Uint8Array(next))
+        } catch (err) {
+          fail(err)
+        }
+      }
+
+      sb.addEventListener('updateend', () => {
+        if (!started && audio.paused) {
+          started = true
+          void audio.play().then(() => {
+            audioUnlocked = true
+            opts?.onStart?.()
+          }).catch(fail)
+        }
+        pump()
+      })
+      sb.addEventListener('error', () => fail(new Error('sourceBuffer error')))
+
+      const reader = res.body!.getReader()
+      ;(async () => {
+        try {
+          for (;;) {
+            const { done, value } = await reader.read()
+            if (generation !== undefined && generation !== speakGeneration) {
+              await reader.cancel()
+              return
+            }
+            if (done) {
+              streamDone = true
+              pump()
+              return
+            }
+            if (value?.byteLength) {
+              queue.push(value)
+              pump()
+            }
+          }
+        } catch (err) {
+          if ((err as { name?: string })?.name === 'AbortError') return
+          fail(err)
+        }
+      })()
+    })
+  })
+}
+
+async function speakNeural(
+  text: string,
+  character: string,
+  opts?: SpeakVoiceOpts,
+  generation?: number,
+): Promise<boolean> {
+  const abort = new AbortController()
+  currentAbort = abort
+  const res = await fetch(apiUrl('/api/tts'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, character }),
+    signal: abort.signal,
+  })
+  if (!res.ok) return false
+  if (generation !== undefined && generation !== speakGeneration) return true
+
+  try {
+    if (canStreamMpeg() && res.body) {
+      await playMpegStream(res, opts, generation)
+      return true
+    }
+    const blob = await res.blob()
+    if (!blob.size) return false
+    await playMpegBlob(blob, opts, generation)
+    return true
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'AbortError') return true
+    throw err
+  }
+}
+
+function finishBlocked(opts?: SpeakVoiceOpts) {
+  opts?.onEnd?.()
+  opts?.onBlocked?.()
+}
+
+/**
+ * Prefer free Edge neural TTS (/api/tts); fall back to browser speechSynthesis.
+ * Speaking UI starts when playback actually begins (or immediately for browser TTS).
+ */
+export function speakText(text: string, opts?: SpeakVoiceOpts): void {
+  const trimmed = text.trim()
+  if (!trimmed) {
+    opts?.onEnd?.()
+    return
+  }
+
+  const generation = ++speakGeneration
+  stopNeuralAudio()
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel()
+  }
+
+  const character = opts?.character?.trim()
+  if (!character) {
+    speakBrowser(trimmed, opts)
+    return
+  }
+
+  const playOpts: SpeakVoiceOpts = { ...opts }
+
+  void speakNeural(trimmed, character, playOpts, generation)
+    .then((ok) => {
+      if (generation !== speakGeneration) return
+      if (!ok) speakBrowser(trimmed, playOpts)
+    })
+    .catch((err) => {
+      if (generation !== speakGeneration) return
+      if (isAutoplayBlocked(err)) {
+        finishBlocked(playOpts)
+        return
+      }
+      try {
+        speakBrowser(trimmed, playOpts)
+      } catch {
+        finishBlocked(playOpts)
+      }
+    })
 }
 
 export function cancelSpeech() {
+  speakGeneration += 1
+  stopNeuralAudio()
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel()
   }

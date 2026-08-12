@@ -18,11 +18,13 @@ import {
 } from 'lucide-react'
 import { sendChat } from '../api/chat'
 import { CHARACTERS, type Character } from '../data/characters'
+import { apiUrl } from '../lib/apiBase'
 import {
   cancelSpeech,
   createToggleListener,
   getSpeechSupport,
   speakText,
+  unlockAudioPlayback,
 } from '../lib/speech'
 import { loadChatSession, saveChatSession } from '../lib/session'
 import ClickSpark from './react-bits/ClickSpark'
@@ -34,6 +36,9 @@ interface Message {
   score?: number | null
   mode?: 'live' | 'demo'
 }
+
+/** Keep recent turns for the model (matches backend MAX_HISTORY_MESSAGES). */
+const HISTORY_LIMIT = 8
 
 interface ChatProps {
   initialCharacter?: Character
@@ -73,12 +78,16 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
   const [ttsMuted, setTtsMuted] = useState(session.ttsMuted)
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const [chatError, setChatError] = useState<string | null>(null)
+  const [pendingSpeak, setPendingSpeak] = useState<string | null>(null)
   const [speechOk] = useState(() => getSpeechSupport())
+  const pendingSpeakVoiceRef = useRef(character.voice)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const mobileCastRef = useRef<HTMLDivElement>(null)
+  const stageDetailsRef = useRef<HTMLDetailsElement>(null)
   const loadingRef = useRef(false)
   const characterIdRef = useRef(character.id)
+  const threadsRef = useRef(threads)
   const listenerRef = useRef<ReturnType<typeof createToggleListener> | null>(
     null,
   )
@@ -96,6 +105,10 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
   useEffect(() => {
     characterIdRef.current = character.id
   }, [character.id])
+
+  useEffect(() => {
+    threadsRef.current = threads
+  }, [threads])
 
   useEffect(() => {
     document.title = `${character.shortName} · Movie Persona Chat`
@@ -158,9 +171,17 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
   useEffect(() => {
     const el = inputRef.current
     if (!el) return
+    const maxH =
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches
+        ? 96
+        : 144
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 144)}px`
+    el.style.height = `${Math.min(el.scrollHeight, maxH)}px`
   }, [input])
+
+  function closeStageDrawer() {
+    if (stageDetailsRef.current) stageDetailsRef.current.open = false
+  }
 
   useEffect(() => {
     setVoiceError(null)
@@ -188,7 +209,7 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/health')
+    fetch(apiUrl('/api/health'))
       .then(async (res) => {
         if (cancelled) return
         if (!res.ok) {
@@ -224,11 +245,21 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
       if (!text || loadingRef.current) return
 
       const activeId = characterIdRef.current
+      const prior = threadsRef.current[activeId] ?? []
+      const history = prior.slice(-HISTORY_LIMIT).map((m) => ({
+        role: m.role,
+        text: m.text,
+      }))
+      const voice =
+        CHARACTERS.find((c) => c.id === activeId)?.voice ?? character.voice
+      pendingSpeakVoiceRef.current = voice
+      unlockAudioPlayback()
       pendingDraftRef.current = text
       setInput('')
       setDrafts((d) => ({ ...d, [activeId]: '' }))
       setVoiceError(null)
       setChatError(null)
+      setPendingSpeak(null)
       updateThread(activeId, (m) => [...m, { role: 'user', text }])
       setLoading(true)
       cancelSpeech()
@@ -240,9 +271,32 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
           character: activeId,
           n_candidates: nCandidates,
           use_rerank: useRerank,
+          history,
         })
         if (res.mode === 'demo') setDemoBanner(true)
         pendingDraftRef.current = ''
+
+        if (
+          speechOk.synthesis &&
+          !ttsMuted &&
+          res.reply.trim() &&
+          characterIdRef.current === activeId
+        ) {
+          speakText(res.reply, {
+            character: activeId,
+            prefer: voice.prefer,
+            gender: voice.gender,
+            rate: voice.rate,
+            pitch: voice.pitch,
+            onStart: () => setSpeaking(true),
+            onEnd: () => setSpeaking(false),
+            onBlocked: () => {
+              setSpeaking(false)
+              setPendingSpeak(res.reply)
+            },
+          })
+        }
+
         updateThread(activeId, (m) => [
           ...m,
           {
@@ -252,18 +306,6 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
             mode: res.mode,
           },
         ])
-
-        if (
-          speechOk.synthesis &&
-          !ttsMuted &&
-          res.reply.trim() &&
-          characterIdRef.current === activeId
-        ) {
-          speakText(res.reply, {
-            onStart: () => setSpeaking(true),
-            onEnd: () => setSpeaking(false),
-          })
-        }
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'Chat request failed.'
@@ -287,12 +329,20 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
         }
       }
     },
-    [nCandidates, useRerank, speechOk.synthesis, ttsMuted, updateThread],
+    [
+      nCandidates,
+      useRerank,
+      speechOk.synthesis,
+      ttsMuted,
+      updateThread,
+      character.voice,
+    ],
   )
 
   useEffect(() => {
     listenerRef.current = createToggleListener({
       onStart: () => {
+        unlockAudioPlayback()
         setRecording(true)
         setVoiceError(null)
       },
@@ -354,6 +404,7 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
     setDrafts((d) => ({ ...d, [character.id]: input }))
     cancelSpeech()
     setSpeaking(false)
+    setPendingSpeak(null)
     listenerRef.current?.abort()
     setRecording(false)
     setCharacter(next)
@@ -362,6 +413,28 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
   function stopSpeaking() {
     cancelSpeech()
     setSpeaking(false)
+    setPendingSpeak(null)
+  }
+
+  function playPendingSpeak() {
+    const text = pendingSpeak?.trim()
+    if (!text || ttsMuted) return
+    unlockAudioPlayback()
+    setPendingSpeak(null)
+    const voice = pendingSpeakVoiceRef.current
+    speakText(text, {
+      character: character.id,
+      prefer: voice.prefer,
+      gender: voice.gender,
+      rate: voice.rate,
+      pitch: voice.pitch,
+      onStart: () => setSpeaking(true),
+      onEnd: () => setSpeaking(false),
+      onBlocked: () => {
+        setSpeaking(false)
+        setPendingSpeak(text)
+      },
+    })
   }
 
   function toggleTtsMuted() {
@@ -369,6 +442,9 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
       if (!muted) {
         cancelSpeech()
         setSpeaking(false)
+        setPendingSpeak(null)
+      } else {
+        unlockAudioPlayback()
       }
       return !muted
     })
@@ -594,30 +670,31 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
           aria-hidden
         />
 
-        <header className="relative z-10 flex items-center justify-between gap-3 border-b border-white/8 bg-background/40 px-4 py-3 sm:px-8 sm:py-3.5">
-          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3.5">
+        <header className="relative z-10 flex items-center justify-between gap-2 border-b border-white/8 bg-background/40 px-3 py-2 safe-header-pad sm:gap-3 sm:px-8 sm:py-3.5">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3.5">
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-fg transition hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:hidden"
+              className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-fg transition hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:hidden"
               aria-label="Back to cast"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
             </button>
-            <div key={character.id} className="header-swap flex min-w-0 items-center gap-3">
+            <div key={character.id} className="header-swap flex min-w-0 items-center gap-2.5 sm:gap-3">
               <CharacterAvatar
                 character={character}
                 size="md"
                 mood={avatarMood}
                 labelled
-                className="!h-11 !w-11 sm:!h-14 sm:!w-14"
+                className="!h-10 !w-10 sm:!h-14 sm:!w-14"
               />
               <div className="min-w-0">
-                <h1 className="truncate font-serif text-lg tracking-[-0.02em] text-foreground sm:text-2xl">
-                  {character.name}
+                <h1 className="truncate font-serif text-base tracking-[-0.02em] text-foreground sm:text-2xl">
+                  <span className="sm:hidden">{character.shortName}</span>
+                  <span className="hidden sm:inline">{character.name}</span>
                 </h1>
                 <p className="mt-0.5 flex items-center gap-2 truncate text-xs text-muted-fg sm:text-sm">
-                  <span className="truncate">{character.film}</span>
+                  <span className="hidden truncate sm:inline">{character.film}</span>
                   {recording && (
                     <span className="mic-bars shrink-0 text-accent" aria-hidden>
                       <span />
@@ -634,6 +711,9 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
                       Speaking
                     </span>
                   )}
+                  {!recording && !speaking && (
+                    <span className="truncate sm:hidden">{character.film}</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -645,7 +725,7 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
                   <button
                     type="button"
                     onClick={stopSpeaking}
-                    className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-xs text-muted-fg transition hover:border-accent/40 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-xs text-muted-fg transition hover:border-accent/40 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10"
                   >
                     Stop
                   </button>
@@ -660,7 +740,7 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
                   title={
                     ttsMuted ? 'Replies are silent' : 'Replies may speak aloud'
                   }
-                  className={`inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                  className={`inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-10 sm:w-10 ${
                     ttsMuted
                       ? 'border-white/10 text-muted-fg hover:border-accent/40 hover:text-accent'
                       : 'border-accent/45 bg-accent/10 text-accent'
@@ -685,23 +765,28 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
 
         <div
           ref={mobileCastRef}
-          className="relative z-10 flex items-center gap-2 overflow-x-auto border-b border-white/8 px-4 py-2.5 lg:hidden"
+          className="relative z-10 flex items-center gap-2 overflow-x-auto border-b border-white/8 px-3 py-1.5 lg:hidden"
         >
           {mobileCastChips}
         </div>
 
-        <details className="stage-drawer relative z-10 border-b border-white/8 lg:hidden">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-sm text-muted-fg transition hover:bg-muted/40 hover:text-foreground">
+        <details
+          ref={stageDetailsRef}
+          className="stage-drawer relative z-10 border-b border-white/8 lg:hidden"
+        >
+          <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm text-muted-fg transition hover:bg-muted/40 hover:text-foreground">
             <span className="truncate">{stageSummary}</span>
             <ChevronDown
               className="stage-drawer-chevron h-4 w-4 shrink-0"
               aria-hidden
             />
           </summary>
-          <div className="border-t border-white/8 px-4 py-4">{stageControls}</div>
+          <div className="border-t border-white/8 px-3 py-3 sm:px-4 sm:py-4">
+            {stageControls}
+          </div>
         </details>
 
-        <div className="thread-fade thread-scroll relative z-10 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-8 sm:py-6">
+        <div className="thread-fade thread-scroll relative z-10 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:space-y-4 sm:px-8 sm:py-6">
           <div className="sr-only" aria-live="polite" aria-atomic="true">
             {loading
               ? `${character.shortName} is writing`
@@ -714,7 +799,7 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
           {messages.length === 0 && !loading && (
             <div
               key={character.id}
-              className="header-swap mx-auto flex w-full max-w-lg flex-col items-center px-1 py-8 text-center sm:py-14"
+              className="header-swap mx-auto flex w-full max-w-lg flex-col items-center px-1 py-5 text-center sm:py-14"
             >
               <div className="relative">
                 <div
@@ -758,7 +843,7 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
                 </span>
               </button>
               <p className="mt-4 text-xs text-muted-fg">
-                Or tap the mic — tap again to send. Voice replies stay muted until you unmute.
+                Or tap the mic — tap again to send. Replies speak aloud by default (mute anytime).
               </p>
             </div>
           )}
@@ -830,7 +915,22 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
           <div ref={bottomRef} />
         </div>
 
-        <div className="relative z-10 border-t border-white/8 bg-background/90 px-4 py-3 safe-composer-pad sm:px-8">
+        <div className="relative z-10 border-t border-white/8 bg-background/90 px-3 py-2.5 safe-composer-pad sm:px-8 sm:py-3">
+          {pendingSpeak && !ttsMuted && (
+            <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between gap-2">
+              <p className="min-w-0 flex-1 text-xs text-muted-fg">
+                Phone blocked autoplay — tap to hear {character.shortName}.
+              </p>
+              <button
+                type="button"
+                onClick={playPendingSpeak}
+                className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-accent/45 bg-accent/10 px-3 text-xs font-medium text-accent transition hover:bg-accent/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <Volume2 className="h-3.5 w-3.5" aria-hidden />
+                Play voice
+              </button>
+            </div>
+          )}
           {chatError && (
             <div
               className="mx-auto mb-2 flex max-w-3xl flex-wrap items-center justify-between gap-2 text-xs text-destructive"
@@ -840,7 +940,7 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
               <button
                 type="button"
                 onClick={retryLastDraft}
-                className="shrink-0 cursor-pointer rounded-md border border-destructive/40 px-2 py-1 text-destructive transition hover:bg-destructive/10"
+                className="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-md border border-destructive/40 px-3 text-destructive transition hover:bg-destructive/10"
               >
                 Retry
               </button>
@@ -868,8 +968,9 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
                 ref={inputRef}
                 value={input}
                 onChange={(e) => onInputChange(e.target.value)}
+                onFocus={closeStageDrawer}
                 onKeyDown={onKeyDown}
-                rows={2}
+                rows={1}
                 maxLength={2000}
                 placeholder={
                   recording
@@ -878,7 +979,7 @@ export function Chat({ initialCharacter, onBack }: ChatProps) {
                 }
                 aria-label="Your message"
                 disabled={recording}
-                className={`min-h-12 max-h-36 w-full resize-none overflow-y-auto rounded-xl border bg-card px-4 py-3 text-base leading-relaxed text-foreground transition-[border-color,box-shadow] duration-200 placeholder:text-muted-fg focus:border-accent/55 disabled:opacity-80 sm:text-sm ${
+                className={`min-h-11 max-h-24 w-full resize-none overflow-y-auto rounded-xl border bg-card px-3.5 py-2.5 text-base leading-relaxed text-foreground transition-[border-color,box-shadow] duration-200 placeholder:text-muted-fg focus:border-accent/55 disabled:opacity-80 sm:min-h-12 sm:max-h-36 sm:px-4 sm:py-3 sm:text-sm ${
                   recording
                     ? 'composer-listen border-accent/45'
                     : 'border-white/10'

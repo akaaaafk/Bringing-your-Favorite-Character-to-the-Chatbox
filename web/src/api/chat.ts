@@ -1,8 +1,17 @@
+import { apiUrl } from '../lib/apiBase'
+
+export interface ChatHistoryTurn {
+  role: 'user' | 'assistant'
+  text: string
+}
+
 export interface ChatRequest {
   message: string
   character: string
   n_candidates: number
   use_rerank: boolean
+  /** Prior turns for this character (oldest → newest), excluding `message`. */
+  history?: ChatHistoryTurn[]
 }
 
 export interface ChatResponse {
@@ -60,7 +69,7 @@ function demoReply(character: string, message: string, nCandidates: number): Cha
 export async function sendChat(req: ChatRequest): Promise<ChatResponse> {
   let res: Response
   try {
-    res = await fetch('/api/chat', {
+    res = await fetch(apiUrl('/api/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),

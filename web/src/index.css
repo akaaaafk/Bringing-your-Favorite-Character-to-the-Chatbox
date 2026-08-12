@@ -365,7 +365,37 @@
   }
 
   .safe-composer-pad {
-    padding-bottom: max(0.875rem, env(safe-area-inset-bottom));
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  .safe-header-pad {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+  }
+
+  @media (max-width: 1023px) {
+    .stage-drawer[open] > div {
+      max-height: min(42dvh, 20rem);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .stage-range {
+      height: 2.75rem;
+    }
+
+    .stage-range::-webkit-slider-thumb {
+      width: 1.35rem;
+      height: 1.35rem;
+    }
+
+    .stage-range::-moz-range-thumb {
+      width: 1.35rem;
+      height: 1.35rem;
+    }
+
+    .stage-switch-row {
+      min-height: 2.75rem;
+    }
   }
 
   .cast-rail:focus-visible {

@@ -10,7 +10,7 @@ Reads:
     data/processed/selected_characters.json (character_name -> persona_tag)
 
 Writes:
-    models/persona_classifier/            (HF checkpoint — auto-detected by
+    models/classifier/                    (HF checkpoint — auto-detected by
                                             persona_classifier/predict.py,
                                             which is what Phase 3 imports)
     results/classifier_metrics.json
@@ -114,7 +114,8 @@ def main() -> None:
 
     use_synthetic = not args.no_synthetic
     run_name = "persona_classifier" if use_synthetic else "persona_classifier_no_synthetic"
-    output_dir = MODELS_DIR / run_name
+    # Inference loads models/classifier/ (see persona_classifier/predict.py)
+    output_dir = MODELS_DIR / "classifier"
 
     persona_tag_map = load_persona_tag_map()
     persona_tags = sorted(set(persona_tag_map.values()))

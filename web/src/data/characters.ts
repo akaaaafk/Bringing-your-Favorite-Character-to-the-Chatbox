@@ -1,4 +1,13 @@
-/** Synthetic stylized portraits — not licensed likenesses. */
+/** Free browser TTS prefs — not licensed actor likenesses. */
+export interface VoiceProfile {
+  /** Prefer matching OS/browser voice names (case-insensitive substrings). */
+  prefer: string[]
+  gender: 'male' | 'female'
+  rate: number
+  pitch: number
+}
+
+/** Character card metadata for the React UI. */
 export interface Character {
   id: string
   name: string
@@ -13,8 +22,9 @@ export interface Character {
   /** Hue hint for portrait wash (0–360) */
   portraitHue: number
   slug: string
-  /** Cinematic portrait under /public/avatars */
+  /** Actor portrait under /public/avatars (see avatars/README.md) */
   avatar: string
+  voice: VoiceProfile
 }
 
 export const CHARACTERS: Character[] = [
@@ -31,6 +41,12 @@ export const CHARACTERS: Character[] = [
     portraitHue: 210,
     slug: 'alvy',
     avatar: '/avatars/alvy.jpg',
+    voice: {
+      prefer: ['Google US English', 'Microsoft Mark', 'Alex', 'Daniel'],
+      gender: 'male',
+      rate: 1.05,
+      pitch: 1.12,
+    },
   },
   {
     id: 'JACK',
@@ -45,6 +61,12 @@ export const CHARACTERS: Character[] = [
     portraitHue: 25,
     slug: 'jack',
     avatar: '/avatars/jack.jpg',
+    voice: {
+      prefer: ['Microsoft David', 'Google UK English Male', 'Fred', 'Bruce'],
+      gender: 'male',
+      rate: 0.95,
+      pitch: 0.88,
+    },
   },
   {
     id: 'BATEMAN',
@@ -59,6 +81,12 @@ export const CHARACTERS: Character[] = [
     portraitHue: 70,
     slug: 'bateman',
     avatar: '/avatars/bateman.jpg',
+    voice: {
+      prefer: ['Microsoft Guy', 'Google US English', 'Tom', 'Ralph'],
+      gender: 'male',
+      rate: 1,
+      pitch: 0.95,
+    },
   },
   {
     id: 'BEN',
@@ -73,6 +101,12 @@ export const CHARACTERS: Character[] = [
     portraitHue: 130,
     slug: 'ben',
     avatar: '/avatars/ben.jpg',
+    voice: {
+      prefer: ['Microsoft Andrew', 'Google UK English Male', 'Junior', 'Sam'],
+      gender: 'male',
+      rate: 0.95,
+      pitch: 1.05,
+    },
   },
   {
     id: 'ERIN',
@@ -87,5 +121,17 @@ export const CHARACTERS: Character[] = [
     portraitHue: 20,
     slug: 'erin',
     avatar: '/avatars/erin.jpg',
+    voice: {
+      prefer: [
+        'Microsoft Zira',
+        'Google US English Female',
+        'Samantha',
+        'Karen',
+        'Susan',
+      ],
+      gender: 'female',
+      rate: 1.05,
+      pitch: 1.08,
+    },
   },
 ]
