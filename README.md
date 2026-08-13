@@ -182,14 +182,47 @@ outputs remain under `models/`; curated evaluation outputs belong in
 
 ## Evaluation summary
 
-The persona classifier reached 0.587 accuracy and 0.577 macro-F1. Best-of-N
-was evaluated on 120 paired generations (5 personas × 8 prompts × 3 seeds,
-`N=3`). Mean target-persona classifier probability rose from 0.213 to 0.422;
-the independent local judge rose from 2.050 to 2.217 on a five-point scale.
+### Persona classifier
+
+The held-out classifier comparison shows a small aggregate improvement from
+adding synthetic hard negatives:
+
+| Training data | Accuracy | Macro-F1 | Alvy F1 | Bateman F1 | Ben F1 | Erin F1 | Jack F1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Real dialogue only | 0.580 | 0.563 | 0.650 | 0.404 | 0.654 | 0.494 | 0.610 |
+| Real + synthetic hard negatives | **0.587** | **0.577** | 0.625 | **0.500** | 0.643 | **0.532** | 0.585 |
+
+Synthetic examples increased accuracy by 0.007 and macro-F1 by 0.014. The
+largest class-level improvement was for Patrick Bateman, while Alvy, Ben, and
+Jack performed slightly better without synthetic examples.
+
+### Best-of-N reranking
+
+The reranker was evaluated on 120 paired generations:
+5 personas × 8 held-out prompts × 3 random seeds, with `N=3` candidates.
+
+| Metric | Plain LoRA (1 response) | Best-of-N reranking | Difference |
+| --- | ---: | ---: | ---: |
+| Mean classifier P(target persona) | 0.2131 | **0.4217** | **+0.2086** |
+| Mean independent LLM judge score (1–5) | 2.050 | **2.217** | **+0.167** |
+
+Pairwise, Best-of-N won 96 of 120 comparisons according to the reranking
+classifier (24 losses, 0 ties). The independent judge recorded 31 wins,
+24 losses, and 65 ties. The judge was the base
+`Qwen/Qwen2.5-1.5B-Instruct` model with the persona LoRA disabled.
 
 The classifier result is partly circular because that classifier selects the
 winner. The smaller independent gain does not establish a strong, reliable
-improvement in persona consistency. Full outputs are in `results/published/`.
+improvement in persona consistency.
+
+Published evidence:
+
+- [Full Best-of-N paired results](results/published/bon_vs_plain_eval.md)
+  ([JSON](results/published/bon_vs_plain_eval.json))
+- [Classifier metrics with synthetic hard negatives](results/published/persona_classifier_metrics.json)
+  and its [confusion matrix](results/published/persona_classifier_confusion_matrix.png)
+- [Real-dialogue-only classifier metrics](results/published/persona_classifier_no_synthetic_metrics.json)
+  and its [confusion matrix](results/published/persona_classifier_no_synthetic_confusion_matrix.png)
 
 ## API and deployment
 
