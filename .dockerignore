@@ -17,15 +17,14 @@ learning.venv
 
 web/node_modules
 web/dist
-notebooks
-scripts
+experiments
+tools
 results
 docs
 design-system
 
 data/raw
-data/processed/*
-!data/processed/selected_characters.json
+data/processed
 
 models/*/checkpoints
 models/**/*.bin

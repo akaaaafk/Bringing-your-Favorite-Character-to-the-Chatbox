@@ -5,212 +5,118 @@
 
 **Five film voices. Your cue.**
 
-A full-stack persona chat experience powered by a LoRA-tuned Qwen generator,
+A React and FastAPI chat application powered by a LoRA-tuned Qwen generator,
 a RoBERTa persona classifier, and optional Best-of-N reranking.
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Enter_the_projection_room-E9A83B?style=for-the-badge&logo=vercel&logoColor=1F1710)](https://web-nine-bice-uqkujgnxqk.vercel.app)
 [![API](https://img.shields.io/badge/FastAPI-Live-3D8C78?style=for-the-badge&logo=fastapi&logoColor=white)](https://akaaaafk--movie-persona-api-fastapi-app.modal.run/docs)
 [![Weights](https://img.shields.io/badge/Hugging_Face-Model_artifacts-FFD21E?style=for-the-badge&logo=huggingface&logoColor=111111)](https://huggingface.co/datasets/akaaafk/Bringing-your-Favorite-Character-to-the-Chatbox/tree/main/models)
 
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
-![PyTorch](https://img.shields.io/badge/PyTorch-LoRA-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)
-![React](https://img.shields.io/badge/React-19-20232A?style=flat-square&logo=react&logoColor=61DAFB)
-![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
-
-[Live demo](https://web-nine-bice-uqkujgnxqk.vercel.app) ·
-[Model weights](https://huggingface.co/datasets/akaaafk/Bringing-your-Favorite-Character-to-the-Chatbox/tree/main/models) ·
-[Quick start](#local-setup) ·
-[Docker](#docker) ·
-[Training](#reproducing-training) ·
-[Results](#evaluation-and-results) ·
-[API](#api)
-
 </div>
 <!-- markdownlint-enable MD033 -->
 
 ![Movie Persona Chat projection-room landing page](docs/web-preview.png)
 
-> **Columbia COMS 5910 Deep Learning — Summer 2026 final project**
+> Columbia COMS 5910 Deep Learning — Summer 2026 final project
 
-## At a glance
+## Find your way around
 
-- **Five personas** from the Cornell Movie-Dialogs Corpus
-- **Qwen2.5-1.5B + LoRA** for persona-conditioned response generation
-- **RoBERTa classifier** for persona scoring and optional Best-of-N selection
-- **React + FastAPI** application with conversation memory, microphone input,
-  and streamed Edge TTS
-- **Reproducible pipeline** covering data preparation, training, evaluation,
-  local development, Docker, and cloud deployment
-
-The hosted UI defaults to one candidate with reranking disabled to reduce
-latency and compute cost. Local development keeps Best-of-N available.
-
-## System overview
-
-```text
-User message + recent history + selected persona
-                         |
-                         v
-       Qwen2.5-1.5B-Instruct + LoRA adapter
-                         |
-                 N candidate replies
-                         |
-                         v
-           RoBERTa persona classifier
-                         |
-             Best-of-N selection (optional)
-                         |
-                         v
-              React UI + optional Edge TTS
-```
-
-The five personas are:
-
-| Tag | Character | Film |
-| --- | --- | --- |
-| `jack` | Jack / Narrator | *Fight Club* |
-| `bateman` | Patrick Bateman | *American Psycho* |
-| `alvy` | Alvy Singer | *Annie Hall* |
-| `ben` | Benjamin Braddock | *The Graduate* |
-| `erin` | Erin Brockovich | *Erin Brockovich* |
-
-## What is included
-
-| Component | Implementation | Required artifact |
-| --- | --- | --- |
-| Persona classifier | `persona_classifier/`, `scripts/train_classifier.py` | `models/classifier/model.safetensors` |
-| Persona generator | `scripts/train_generator.py`, `inference.py` | `models/generator/adapter_model.safetensors` |
-| Best-of-N reranker | `PersonaPipeline.chat()` in `inference.py` | Classifier + generator artifacts |
-| API | `api_server.py` (FastAPI) | Same model artifacts |
-| Web client | `web/` (React, Vite, TypeScript) | None |
-| Speech output | `tts_edge.py` (`edge-tts`) | Internet access; no local voice weights |
-| Evaluation | `scripts/evaluate_bon_rerank.py` | Same model artifacts |
-
-The generator directory contains a **LoRA adapter**, not the full Qwen model.
-At first use, Transformers downloads the base
-`Qwen/Qwen2.5-1.5B-Instruct` checkpoint and caches it locally.
-
-## Repository layout
+The repository is divided by purpose. You should only need one area for most
+tasks:
 
 ```text
 final_project/
-├── api_server.py                    # FastAPI endpoints
-├── inference.py                     # generation, grounding, and reranking
-├── tts_edge.py                      # streamed Edge TTS
-├── modal_app.py                     # optional Modal deployment
-├── Dockerfile                       # portable API container
-├── requirements.txt                 # training + evaluation + serving
-├── requirements-space.txt           # lean API/container dependencies
-├── persona_classifier/              # classifier inference interface
-├── scripts/
-│   ├── download_data.py
-│   ├── preprocess.py
-│   ├── generate_hard_negatives.py
-│   ├── train_classifier.py
-│   ├── build_training_pairs.py
-│   ├── train_generator.py
-│   └── evaluate_bon_rerank.py
-├── notebooks/                       # original exploratory/training notebooks
-├── data/
-│   ├── raw/                         # downloaded Cornell corpus (gitignored)
-│   └── processed/                   # selected personas and derived datasets
-├── models/
-│   ├── classifier/                  # RoBERTa checkpoint
-│   └── generator/                   # Qwen LoRA adapter
-├── results/                         # classifier and reranking evaluations
-└── web/                             # React client
+├── web/                       # React user interface
+├── src/movie_persona/         # production Python backend
+│   ├── api.py                 # FastAPI routes
+│   ├── pipeline.py            # generation, memory, grounding, reranking
+│   ├── speech.py              # Edge TTS
+│   ├── paths.py               # shared filesystem locations
+│   └── classifier/            # persona classifier inference
+├── experiments/
+│   ├── scripts/               # data prep, training, and evaluation
+│   └── notebooks/             # exploratory notebooks
+├── deploy/
+│   ├── modal.py               # hosted API deployment
+│   └── docker/Dockerfile      # portable full-stack container
+├── tools/preflight.py         # artifact and deployment checks
+├── config/                    # canonical persona metadata
+├── data/                      # downloaded and generated datasets
+├── models/                    # local weights plus tracked manifest
+├── results/published/         # curated report evidence
+├── docs/                      # interfaces and deployment guides
+└── pyproject.toml             # Python package and dependencies
 ```
 
-## Do I need to retrain?
+- To change the interface, work in `web/`.
+- To change production inference or API behavior, work in
+  `src/movie_persona/`.
+- To reproduce training or evaluation, use `experiments/`.
+- To publish or containerize the app, use `deploy/` and
+  `docs/deployment/`.
+- Do not commit generated datasets or weights. Their expected locations and
+  checksums are recorded in `models/manifest.json`.
 
-No, not to run the finished application. If these two files are present, the
-trained pipeline is ready:
+## How it works
 
 ```text
-models/classifier/model.safetensors
-models/generator/adapter_model.safetensors
+message + recent history + persona
+                |
+                v
+       Qwen2.5-1.5B + LoRA
+                |
+         candidate replies
+                |
+                v
+       RoBERTa persona scorer
+                |
+       optional Best-of-N pick
+                |
+                v
+        React UI + Edge TTS
 ```
 
-Retraining is only needed to reproduce the experiments, change personas, or
-produce new weights. The classifier checkpoint is large and may not be present
-in a fresh Git clone because model artifacts are normally excluded from Git.
-Copy or download both artifacts into the paths above before running the API or
-building the Docker image.
-
-Download the complete classifier and generator artifact directories from
-[Hugging Face](https://huggingface.co/datasets/akaaafk/Bringing-your-Favorite-Character-to-the-Chatbox/tree/main/models):
-
-```bash
-hf download akaaafk/Bringing-your-Favorite-Character-to-the-Chatbox \
-  --repo-type dataset --include "models/**" --local-dir .
-```
+The app supports Jack (*Fight Club*), Patrick Bateman (*American Psycho*),
+Alvy Singer (*Annie Hall*), Benjamin Braddock (*The Graduate*), and Erin
+Brockovich (*Erin Brockovich*). `config/personas.json` is the canonical
+metadata source.
 
 ## Local setup
 
-### Prerequisites
+Requirements:
 
 - Python 3.11 or 3.12
 - Node.js 20+
-- Approximately 8 GB of free disk space for dependencies, weights, and the
-  cached Qwen base model
-- NVIDIA GPU recommended; CPU inference works but is slow
+- The two model artifacts listed below
+- NVIDIA GPU recommended; CPU inference is supported but slow
 
-### 1. Python environment
-
-From `final_project/`:
+From `final_project/`, create an environment and install the package:
 
 ```bash
 python -m venv .venv
-```
-
-Windows PowerShell:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
+# Windows: .\.venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -e .
+python tools/preflight.py --target local
 ```
 
-macOS/Linux:
+For experiments, install the training dependencies:
 
 ```bash
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -e ".[training]"
 ```
 
-For an NVIDIA system, install the PyTorch build appropriate for the installed
-driver. This project was tested locally with CUDA 13:
+If needed, install the PyTorch build appropriate for your NVIDIA driver before
+installing the package.
+
+Start the API:
 
 ```bash
-python -m pip install --upgrade torch torchvision \
-  --index-url https://download.pytorch.org/whl/cu130
+movie-persona-api
 ```
 
-Verify acceleration:
-
-```bash
-python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
-```
-
-### 2. Start the API
-
-```bash
-python api_server.py
-```
-
-The API runs at `http://127.0.0.1:8000`. The first model load can take several
-minutes while the base Qwen checkpoint is downloaded.
-
-Smoke test:
-
-```bash
-curl http://127.0.0.1:8000/api/health
-```
-
-### 3. Start the web client
-
-In another terminal:
+Start the client in a second terminal:
 
 ```bash
 cd web
@@ -218,188 +124,93 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Vite proxies `/api` to the local FastAPI server.
-To use a remote backend, copy `web/.env.example` to `web/.env` and set
-`VITE_API_BASE`.
-
-### Command-line generation
+Open `http://localhost:5173`. Vite proxies `/api` to
+`http://127.0.0.1:8000`. Direct command-line generation is also available:
 
 ```bash
-python inference.py --character jack \
+movie-persona --character jack \
   --prompt "What do you think about modern life?" --n 3 --all
 ```
 
-## Docker
+## Model artifacts
 
-The root Dockerfile builds the React client and packages it with the API and
-model artifacts. One container therefore serves the complete application:
+Running the finished app does not require retraining. It does require:
 
-- UI: `http://localhost:8000`
-- API docs: `http://localhost:8000/docs`
-- Health: `http://localhost:8000/api/health`
-
-The build intentionally fails if either trained artifact is missing, preventing
-an accidental deployment with the classifier stub or untuned base generator.
-
-### Portable CPU image
-
-```bash
-docker build -t movie-persona-api .
-docker run --rm -p 8000:8000 \
-  -v movie-persona-hf-cache:/home/app/.cache/huggingface \
-  movie-persona-api
+```text
+models/classifier/model.safetensors
+models/generator/adapter_model.safetensors
 ```
 
-### NVIDIA GPU image
-
-The host needs a compatible NVIDIA driver and NVIDIA Container Toolkit:
-
-```bash
-docker build \
-  --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130 \
-  -t movie-persona-api:cuda .
-
-docker run --rm --gpus all -p 8000:8000 \
-  -v movie-persona-hf-cache:/home/app/.cache/huggingface \
-  movie-persona-api:cuda
-```
-
-Useful environment variables:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `PORT` | `8000` | Container API port |
-| `PRELOAD_PIPELINE` | `0` | Set to `1` to load models during startup |
-| `CORS_ORIGINS` | local Vite origins | Comma-separated allowed UI origins |
-| `HF_TOKEN` | unset | Optional Hugging Face token |
-
-After startup:
+Download them from
+[Hugging Face](https://huggingface.co/datasets/akaaafk/Bringing-your-Favorite-Character-to-the-Chatbox/tree/main/models):
 
 ```bash
-curl http://localhost:8000/api/health
+hf download akaaafk/Bringing-your-Favorite-Character-to-the-Chatbox \
+  --repo-type dataset --include "models/**" --local-dir .
 ```
 
-Then open `http://localhost:8000` in a browser.
+The generator artifact is a LoRA adapter. Transformers downloads and caches
+the `Qwen/Qwen2.5-1.5B-Instruct` base model on first use.
 
-## Reproducing training
+## Reproduce the experiments
 
-The project uses the Cornell Movie-Dialogs Corpus. Raw and most processed data
-are intentionally gitignored.
-
-### Data preparation
+Run all commands from `final_project/`:
 
 ```bash
-python scripts/download_data.py
-python scripts/preprocess.py
+# Data
+python experiments/scripts/download_data.py
+python experiments/scripts/preprocess.py
+
+# Optional hard-negative synthesis; requires ANTHROPIC_API_KEY
+python experiments/scripts/generate_hard_negatives.py
+
+# Classifier
+python experiments/scripts/train_classifier.py
+
+# Generator
+python experiments/scripts/build_training_pairs.py
+python experiments/scripts/train_generator.py
+
+# Best-of-N evaluation
+python experiments/scripts/evaluate_bon_rerank.py --n 3 --seeds 42 43 44
 ```
 
-`notebooks/Data_Prep.ipynb` documents the original persona-selection and
-train/validation/test split process. The finished repository already contains
-the selected-persona metadata and classifier splits used for this project.
+The notebooks under `experiments/notebooks/` also assume the repository root
+as their working directory. Generated datasets remain under `data/`; model
+outputs remain under `models/`; curated evaluation outputs belong in
+`results/published/`.
 
-### Classifier
+## Evaluation summary
 
-```bash
-# Optional: requires ANTHROPIC_API_KEY and creates hard-negative rewrites
-python scripts/generate_hard_negatives.py
+The persona classifier reached 0.587 accuracy and 0.577 macro-F1. Best-of-N
+was evaluated on 120 paired generations (5 personas × 8 prompts × 3 seeds,
+`N=3`). Mean target-persona classifier probability rose from 0.213 to 0.422;
+the independent local judge rose from 2.050 to 2.217 on a five-point scale.
 
-# Real dialogue + hard negatives when available
-python scripts/train_classifier.py
+The classifier result is partly circular because that classifier selects the
+winner. The smaller independent gain does not establish a strong, reliable
+improvement in persona consistency. Full outputs are in `results/published/`.
 
-# Real-dialogue ablation
-python scripts/train_classifier.py --no-synthetic
-```
+## API and deployment
 
-The classifier is saved to `models/classifier/`; metrics are written to
-`results/`.
+The production ASGI target is `movie_persona.api:app`.
 
-### Generator
+- `GET /api/health` — service and model-load status
+- `GET /api/characters` — persona metadata
+- `POST /api/chat` — generation with optional Best-of-N
+- `POST /api/tts` — streamed MP3 speech
 
-```bash
-python scripts/build_training_pairs.py
-python scripts/train_generator.py
-```
+The public architecture uses Vercel for `web/` and Modal for the API. See
+`docs/deployment/README.md` for the hosted procedure and
+`docs/deployment/docker.md` for the portable container.
 
-The first command pairs a selected character's response with the preceding
-line in each Cornell conversation. The second LoRA-fine-tunes
-Qwen2.5-1.5B-Instruct and writes the adapter to `models/generator/`.
+## Limitations and usage notes
 
-## Evaluation and results
-
-Classifier test performance with synthetic hard negatives:
-
-- Accuracy: **0.587**
-- Macro-F1: **0.577**
-
-Best-of-N versus plain LoRA was evaluated on 120 paired generations
-(5 personas × 8 prompts × 3 random seeds, `N=3`):
-
-| Metric | Plain LoRA | Best-of-N | Difference |
-| --- | ---: | ---: | ---: |
-| Mean classifier probability for target persona | 0.213 | 0.422 | **+0.209** |
-| Mean local LLM judge score (1–5) | 2.050 | 2.217 | **+0.167** |
-
-The classifier metric improves strongly, but that comparison is partly
-circular because the same classifier selects the Best-of-N output. The local
-LLM judge (base Qwen2.5-1.5B with the persona LoRA disabled) found only a small
-gain with many ties. Therefore, the evidence supports a clear improvement in
-the reranker's own score, but **not a strong or reliable independent
-persona-consistency improvement**.
-
-Reproduce the comparison:
-
-```bash
-python scripts/evaluate_bon_rerank.py --n 3 --seeds 42 43 44
-```
-
-Detailed outputs:
-
-- `results/persona_classifier_metrics.json`
-- `results/persona_classifier_no_synthetic_metrics.json`
-- `results/bon_vs_plain_eval.json`
-- `results/bon_vs_plain_eval.md`
-
-## API
-
-| Method | Route | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/health` | Service, model-load, persona, and TTS status |
-| `GET` | `/api/characters` | Persona metadata |
-| `POST` | `/api/chat` | Generate a reply, optionally with Best-of-N |
-| `POST` | `/api/tts` | Stream an `audio/mpeg` response |
-
-Example:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/chat \
-  -H "Content-Type: application/json" \
-  -d "{\"message\":\"How is your day going?\",\"character\":\"alvy\",\"n_candidates\":3,\"use_rerank\":true,\"history\":[]}"
-```
-
-## Deployment
-
-- `modal_app.py` deploys the FastAPI backend to Modal.
-- `web/vercel.json` and `VITE_API_BASE` support deploying the React client to
-  Vercel.
-- `DEPLOY.md` contains the current hosted deployment procedure.
-- The Dockerfile can be used on any container host that provides enough memory
-  and permits downloading the Qwen base model.
-
-## Limitations
-
-- The persona classifier has moderate held-out accuracy, so maximizing its
-  score does not guarantee that humans or another LLM will prefer the result.
-- Best-of-N increases latency and compute approximately with the number of
-  candidates.
-- The independent judge used in the included evaluation is a small local model,
-  not a human evaluation or a large external judge.
-- Identity questions use deterministic grounding rules; they should not be
-  interpreted as evidence of learned persona behavior.
+- Best-of-N increases latency and compute with the number of candidates.
+- The classifier has moderate held-out accuracy; its score is not a human
+  preference guarantee.
+- Identity questions use deterministic grounding rules.
 - Edge TTS voices are synthetic and are not licensed actor voice likenesses.
-
-## Data and model notes
-
-The Cornell Movie-Dialogs Corpus remains subject to its original terms. The
-project is intended for coursework and research. Movie character names belong
-to their respective rights holders; generated avatars and voices are not
-official or licensed representations.
+- The Cornell Movie-Dialogs Corpus and character names remain subject to their
+  original terms and rights holders. This project is intended for coursework
+  and research.

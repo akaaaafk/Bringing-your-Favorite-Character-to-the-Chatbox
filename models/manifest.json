@@ -1,0 +1,18 @@
+{
+  "artifact_repository": "https://huggingface.co/datasets/akaaafk/Bringing-your-Favorite-Character-to-the-Chatbox/tree/main/models",
+  "base_generator": "Qwen/Qwen2.5-1.5B-Instruct",
+  "artifacts": [
+    {
+      "path": "models/classifier/model.safetensors",
+      "bytes": 498622052,
+      "sha256": "44fcb23a3c56254871cba6cdb6e4068e5a0666099f91b78d3849bc8361e0982f",
+      "purpose": "RoBERTa persona classifier"
+    },
+    {
+      "path": "models/generator/adapter_model.safetensors",
+      "bytes": 17462432,
+      "sha256": "c2dab9a8040269a3d13b95cd1283e2b93a0f45852347841d5997b9d5b1713f08",
+      "purpose": "Qwen LoRA persona adapter"
+    }
+  ]
+}

@@ -42,22 +42,26 @@ huggingface/
 web/node_modules/
 web/dist/
 
-# Data artifacts (keep folder placeholders)
+# Data artifacts (canonical metadata lives in config/)
 data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
 data/hard_negatives.jsonl
 
-# Trained weights (keep folder placeholders)
-models/classifier/*
-!models/classifier/.gitkeep
-models/generator/*
-!models/generator/.gitkeep
+# Trained weights and checkpoints. Keep model cards, tokenizer files, and
+# configuration metadata tracked; publish large weights externally.
+models/**/checkpoints/
+models/**/*.safetensors
+models/**/*.bin
+models/**/*.pt
+models/**/*.pth
 
-# Experiment outputs
+# Experiment outputs; curated report evidence is tracked.
 results/*
 !results/.gitkeep
+!results/published/
+!results/published/**
 
 # Logs / checkpoints
 runs/
