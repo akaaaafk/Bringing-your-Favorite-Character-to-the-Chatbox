@@ -204,6 +204,14 @@ seven swaps in the confusion matrix). Alvy↔Ben confusion appears as well, but
 mostly when Alvy lines are short. The largest single off-diagonal error is
 Erin → Ben (17 cases). Full matrices are linked below.
 
+| True \ Predicted | Alvy | Bateman | Ben | Erin | Jack |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| **Alvy** | 35 | 16 | 8 | 3 | 7 |
+| **Bateman** | 3 | 27 | 13 | 1 | 7 |
+| **Ben** | 1 | 4 | 55 | 1 | 4 |
+| **Erin** | 4 | 4 | 17 | 21 | 4 |
+| **Jack** | 0 | 6 | 13 | 3 | 31 |
+
 ### RQ3 — Best-of-N reranking
 
 Does classifier Best-of-N improve persona consistency over plain LoRA?
