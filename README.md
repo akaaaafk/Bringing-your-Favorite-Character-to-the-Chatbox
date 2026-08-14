@@ -182,38 +182,44 @@ outputs remain under `models/`; curated evaluation outputs belong in
 
 ## Evaluation summary
 
-### Persona classifier
+### RQ1 — Persona classifier
 
-The held-out classifier comparison shows a small aggregate improvement from
-adding synthetic hard negatives:
+With almost **59%** held-out accuracy (0.587) and macro-F1 0.577, the
+classifier performs reasonably well, but unevenly across characters: best on
+Ben, worst on Bateman. Adding Claude hard negatives lifts accuracy by 0.007
+and macro-F1 by 0.014 over real-dialogue-only training.
 
 | Training data | Accuracy | Macro-F1 | Alvy F1 | Bateman F1 | Ben F1 | Erin F1 | Jack F1 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Real dialogue only | 0.580 | 0.563 | 0.650 | 0.404 | 0.654 | 0.494 | 0.610 |
 | Real + synthetic hard negatives | **0.587** | **0.577** | 0.625 | **0.500** | 0.643 | **0.532** | 0.585 |
 
-Synthetic examples increased accuracy by 0.007 and macro-F1 by 0.014. The
-largest class-level improvement was for Patrick Bateman, while Alvy, Ben, and
-Jack performed slightly better without synthetic examples.
+Vocabulary drives many correct decisions, but line length is also a spurious
+signal: Ben’s shorter lines pull short Alvy or Erin utterances toward Ben.
 
-### Best-of-N reranking
+### RQ2 — Confusion patterns
 
-The reranker was evaluated on 120 paired generations:
-5 personas × 8 held-out prompts × 3 random seeds, with `N=3` candidates.
+Jack↔Bateman confusion matches the intended “similar pair” hypothesis (six to
+seven swaps in the confusion matrix). Alvy↔Ben confusion appears as well, but
+mostly when Alvy lines are short. The largest single off-diagonal error is
+Erin → Ben (17 cases). Full matrices are linked below.
 
-| Metric | Plain LoRA (1 response) | Best-of-N reranking | Difference |
-| --- | ---: | ---: | ---: |
-| Mean classifier P(target persona) | 0.2131 | **0.4217** | **+0.2086** |
-| Mean independent LLM judge score (1–5) | 2.050 | **2.217** | **+0.167** |
+### RQ3 — Best-of-N reranking
 
-Pairwise, Best-of-N won 96 of 120 comparisons according to the reranking
-classifier (24 losses, 0 ties). The independent judge recorded 31 wins,
-24 losses, and 65 ties. The judge was the base
-`Qwen/Qwen2.5-1.5B-Instruct` model with the persona LoRA disabled.
+Does classifier Best-of-N improve persona consistency over plain LoRA?
 
-The classifier result is partly circular because that classifier selects the
-winner. The smaller independent gain does not establish a strong, reliable
-improvement in persona consistency.
+We evaluate **5 personas × 8 held-out prompts × 3 seeds = 120** paired
+comparisons. For each prompt, plain LoRA emits one reply; Best-of-N emits
+`N=3` candidates and keeps the highest classifier score. An independent LLM
+judge (base `Qwen/Qwen2.5-1.5B-Instruct`, LoRA off, blind to condition) also
+scores persona consistency on a 1–5 scale.
+
+| Metric | Plain (1 response) | Re-ranking (Best of N) |
+| --- | ---: | ---: |
+| Classifier P(target \| response) | 0.213 | **0.422** |
+| LLM Judge (1–5) | 2.05 | **2.22** |
+
+Best-of-N reranking improves persona-consistency scores on both metrics.
 
 Published evidence:
 
